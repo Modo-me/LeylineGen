@@ -1,6 +1,10 @@
 package task
 
-import "gorm.io/gorm"
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
 
 type TaskRepository struct {
 	db *gorm.DB
@@ -12,13 +16,13 @@ func NewTaskRepository(db *gorm.DB) *TaskRepository {
 	}
 }
 
-func (tr *TaskRepository) CreateTask(task *Task) (uint, error) {
-	return task.ID, tr.db.Create(task).Error
+func (tr *TaskRepository) CreateTask(ctx context.Context, task *Task) (uint, error) {
+	return task.ID, tr.db.WithContext(ctx).Create(task).Error
 }
 
-func (tr *TaskRepository) QueryTaskState(taskId uint) (string, error) {
+func (tr *TaskRepository) QueryTaskState(ctx context.Context, taskId uint) (string, error) {
 	var task Task
-	result := tr.db.First(&task, taskId)
+	result := tr.db.WithContext(ctx).First(&task, taskId)
 	if result.Error != nil {
 		return "", result.Error
 	}

@@ -20,11 +20,11 @@ func NewTaskHandler(taskService *TaskService) *TaskHandler {
 func (t *TaskHandler) CreateTask(c *gin.Context) {
 	var taskInfo TaskInfo
 	if err := c.ShouldBindJSON(&taskInfo); err != nil {
-		C.JSON(400, gin.H{"error": "Invalid request"})
+		c.JSON(400, gin.H{"error": "Invalid request"})
 	}
-	taskId, err := t.taskService.CreateTask(&taskInfo)
+	taskId, err := t.taskService.CreateTask(c.Request.Context(), &taskInfo)
 	if err != nil {
-		C.JSON(500, gin.H{"error": "Failed to add task"})
+		c.JSON(500, gin.H{"error": "Failed to add task"})
 	}
 	c.JSON(201, gin.H{"taskId": taskId, "status": "pending"})
 }
@@ -35,7 +35,7 @@ func (t *TaskHandler) QueryTaskState(c *gin.Context) {
 	if err != nil {
 		c.JSON(400, gin.H{"error": "invalid taskId"})
 	}
-	stateResp, err := t.taskService.QueryTaskState(uint(taskId))
+	stateResp, err := t.taskService.QueryTaskState(c.Request.Context(), uint(taskId))
 	if err != nil {
 		c.JSON(500, gin.H{"error": "Failed to query task result"})
 	}

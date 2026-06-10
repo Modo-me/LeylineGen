@@ -6,30 +6,30 @@ type Task struct {
 	WorldDesc string     `gorm:"type:text" json:"world_desc"`
 	Emotion   string     `gorm:"type:varchar(100)" json:"emotion"`
 	State     string     `gorm:"type:varchar(20)" json:"state"`
-	Result    taskResult `gorm:"serializer:json"`
+	Result    TaskResult `gorm:"serializer:json"`
 }
 
-type taskResult struct {
+type TaskResult struct {
 	ID          string      `json:"id"`
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
-	Steps       []questStep `json:"steps"`
-	Npcs        []npc       `json:"npcs"`
+	Steps       []QuestStep `json:"steps"`
+	Npcs        []Npc       `json:"npcs"`
 }
 
-type position struct {
+type Position struct {
 	X int `json:"x"`
 	Y int `json:"y"`
 }
 
-type npc struct {
+type Npc struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
-	Position      position `json:"position"`
+	Position      Position `json:"position"`
 	DialogueLines []string `json:"dialogueLines"`
 }
 
-type questStep struct {
+type QuestStep struct {
 	Type        string `json:"type"`
 	TargetNpcId string `json:"targetNpcId"`
 }
