@@ -3,29 +3,29 @@ package task
 import (
 	"context"
 	"log"
-
-	myasynq "quest_generator/internal/asynq"
-
-	"github.com/hibiken/asynq"
 )
 
 type TaskService struct {
 	taskRepository *TaskRepository
-	asynqClient    *asynq.Client
+	taskQueue      TaskQueue
 }
 
-func NewTaskService(taskRepository *TaskRepository, asynqClient *asynq.Client) *TaskService {
+type TaskQueue interface {
+	EnqueueTask(taskID uint) error
+}
+
+func NewTaskService(taskRepository *TaskRepository, taskQue TaskQueue) *TaskService {
 	return &TaskService{
 		taskRepository: taskRepository,
-		asynqClient:    asynqClient,
+		taskQueue:      taskQue,
 	}
 }
 
 func (ts *TaskService) CreateTask(ctx context.Context, taskInfo *TaskInfo) (uint, error) {
 	task := Task{
-		WorldName: taskInfo.worldName,
-		WorldDesc: taskInfo.worldDesc,
-		Emotion:   taskInfo.emotion,
+		WorldName: taskInfo.WorldName,
+		WorldDesc: taskInfo.WorldDesc,
+		Emotion:   taskInfo.Emotion,
 		State:     "PENDING",
 	}
 	taskID, err := ts.taskRepository.CreateTask(ctx, &task)
@@ -33,13 +33,12 @@ func (ts *TaskService) CreateTask(ctx context.Context, taskInfo *TaskInfo) (uint
 		return 0, err
 	}
 
-	// Enqueue async processing job via asynq
-	if ts.asynqClient != nil {
-		info, err := myasynq.EnqueueProcessTask(ts.asynqClient, taskID)
+	// Enqueue async processing job for this task
+	if ts.taskQueue != nil {
+		err := ts.taskQueue.EnqueueTask(taskID)
 		if err != nil {
-			log.Printf("Failed to enqueue asynq task %d: %v", taskID, err)
-		} else {
-			log.Printf("Enqueued asynq task %d (asynq ID: %s)", taskID, info.ID)
+			log.Printf("failed to enqueue task %d for async processing: %v", taskID, err)
+			return 0, err
 		}
 	}
 

@@ -2,9 +2,9 @@ package task
 
 // TaskInfo dto data between frontend and handler
 type TaskInfo struct {
-	worldName string
-	worldDesc string
-	emotion   string
+	WorldName string
+	WorldDesc string
+	Emotion   string
 }
 
 // TODO: add percentage field

@@ -1,5 +1,5 @@
 package main
 
 func main() {
-	server_init()
+	serverInit()
 }
