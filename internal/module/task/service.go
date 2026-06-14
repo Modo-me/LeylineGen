@@ -66,3 +66,7 @@ func (ts *TaskService) QueryTaskInfo(ctx context.Context, id uint) (*TaskInfo, e
 	}
 	return taskInfo, nil
 }
+
+func (ts *TaskService) UpdateTask(ctx context.Context, task *Task) error {
+	return ts.taskRepository.UpdateTask(ctx, task)
+}

@@ -37,3 +37,7 @@ func (tr *TaskRepository) QueryTaskState(ctx context.Context, taskId uint) (stri
 	}
 	return task.State, nil
 }
+
+func (tr *TaskRepository) UpdateTask(ctx context.Context, task *Task) error {
+	return tr.db.WithContext(ctx).Save(task).Error
+}

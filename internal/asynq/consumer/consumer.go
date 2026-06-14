@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"quest_generator/internal/asynq/queue_common"
+	"quest_generator/internal/module/llm"
 	"quest_generator/internal/module/task"
 
 	"github.com/hibiken/asynq"
@@ -46,5 +47,37 @@ func (tp *taskProcessor) processTask(ctx context.Context, t *asynq.Task) error {
 	}
 	taskId := payload.TaskID
 	log.Printf("Processing task %d", taskId)
+	taskInfo, err := tp.taskService.QueryTaskInfo(ctx, taskId)
+	if err != nil {
+		return err
+	}
+
+	worldName := taskInfo.WorldName
+	worldDesc := taskInfo.WorldDesc
+	emotion := taskInfo.Emotion
+
+	result, err := llm.ProcessTask(worldName, worldDesc, emotion)
+
+	var newTask task.Task
+
+	if err != nil {
+		log.Printf("Failed to process task %d: %v", taskId, err)
+		newTask.State = "FAILED"
+	}
+
+	newTask = task.Task{
+		ID:        taskId,
+		WorldName: worldName,
+		WorldDesc: worldDesc,
+		Emotion:   emotion,
+		State:     "COMPLETED",
+		Result:    *result,
+	}
+
+	err = tp.taskService.UpdateTask(ctx, &newTask)
+	if err != nil {
+		log.Printf("Failed to update task %d: %v", taskId, err)
+		return err
+	}
 	return nil
 }
