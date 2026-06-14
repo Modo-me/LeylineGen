@@ -14,10 +14,10 @@ type TaskQueue interface {
 	EnqueueTask(taskID uint) error
 }
 
-func NewTaskService(taskRepository *TaskRepository, taskQue TaskQueue) *TaskService {
+func NewTaskService(taskRepository *TaskRepository, taskQueue TaskQueue) *TaskService {
 	return &TaskService{
 		taskRepository: taskRepository,
-		taskQueue:      taskQue,
+		taskQueue:      taskQueue,
 	}
 }
 
@@ -51,4 +51,18 @@ func (ts *TaskService) QueryTaskState(ctx context.Context, id uint) (StateRespIn
 		state: taskState,
 	}
 	return respInfo, err
+}
+
+func (ts *TaskService) QueryTaskInfo(ctx context.Context, id uint) (*TaskInfo, error) {
+	task, err := ts.taskRepository.QueryTask(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	taskInfo := &TaskInfo{
+		WorldName: task.WorldName,
+		WorldDesc: task.WorldDesc,
+		Emotion:   task.Emotion,
+	}
+	return taskInfo, nil
 }

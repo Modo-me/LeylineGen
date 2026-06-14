@@ -34,7 +34,7 @@ func initConfig() {
 	viper.AutomaticEnv()
 }
 
-func DB_INIT() *gorm.DB {
+func DbInit() *gorm.DB {
 	initConfig()
 
 	dsn := fmt.Sprintf(

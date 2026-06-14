@@ -9,15 +9,17 @@ import (
 )
 
 func serverInit() {
-	db := database.DB_INIT()
+	db := database.DbInit()
 
 	addr := redisAddr()
 
-	asyncQueue := asynqInit(addr)
+	producer := producerInit(addr)
 
 	taskRepository := task.NewTaskRepository(db)
-	taskService := task.NewTaskService(taskRepository, asyncQueue)
+	taskService := task.NewTaskService(taskRepository, producer)
 	taskHandler := task.NewTaskHandler(taskService)
+
+	consumerInit(addr, taskService)
 
 	handlers := &router.Handlers{
 		TaskHandler: taskHandler,

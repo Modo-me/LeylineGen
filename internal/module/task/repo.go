@@ -20,6 +20,15 @@ func (tr *TaskRepository) CreateTask(ctx context.Context, task *Task) (uint, err
 	return task.ID, tr.db.WithContext(ctx).Create(task).Error
 }
 
+func (tr *TaskRepository) QueryTask(ctx context.Context, taskId uint) (*Task, error) {
+	var task Task
+	result := tr.db.WithContext(ctx).First(&task, taskId)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &task, nil
+}
+
 func (tr *TaskRepository) QueryTaskState(ctx context.Context, taskId uint) (string, error) {
 	var task Task
 	result := tr.db.WithContext(ctx).First(&task, taskId)

@@ -2,19 +2,22 @@ package main
 
 import (
 	"log"
-	"quest_generator/internal/asynq"
+	"quest_generator/internal/asynq/consumer"
+	"quest_generator/internal/asynq/producer"
+
+	"quest_generator/internal/module/task"
 )
 
-func asynqInit(addr string) *asynq.AsyncQueue {
-	// AsyncQueue — enqueues tasks to be processed in the background
-	asyncQueue := asynq.NewAsyncQueue(addr)
-
-	// Worker — processes tasks in the background
-	srv := asynq.NewWorker(addr)
-	taskMux := asynq.NewProcessHandler()
+func consumerInit(addr string, taskService *task.TaskService) {
+	worker := consumer.NewWorker(addr)
+	taskMux := consumer.NewProcessHandler(taskService)
 	go func() {
-		log.Printf("Starting asynq worker (Redis: %s)", addr)
-		asynq.StartWorker(srv, taskMux)
+		log.Printf("Starting asynq (Redis: %s)", addr)
+		consumer.StartWorker(worker, taskMux)
 	}()
-	return asyncQueue
+}
+
+func producerInit(addr string) *producer.Producer {
+	newProducer := producer.NewProducer(addr)
+	return newProducer
 }
