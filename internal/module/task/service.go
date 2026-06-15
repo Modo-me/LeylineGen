@@ -51,8 +51,8 @@ func (ts *TaskService) QueryTaskResult(ctx context.Context, id uint) (ResultResp
 		return ResultRespInfo{}, err
 	}
 	resultInfo := ResultRespInfo{
-		state:  task.State,
-		result: task.Result,
+		State:  task.State,
+		Result: task.Result,
 	}
 	return resultInfo, err
 }
