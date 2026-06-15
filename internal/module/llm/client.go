@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"strings"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -62,6 +63,7 @@ func init() {
 		panic("failed to compile LLM chain: " + err.Error())
 	}
 	llmRunner = runner
+	log.Printf("successfully initialized LLM runner with model %s at %s", modelName, baseURL)
 }
 
 // ProcessTask generates a quest task result based on the given world context.

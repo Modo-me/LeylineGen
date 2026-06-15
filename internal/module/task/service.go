@@ -45,12 +45,16 @@ func (ts *TaskService) CreateTask(ctx context.Context, taskInfo *TaskInfo) (uint
 	return taskID, nil
 }
 
-func (ts *TaskService) QueryTaskState(ctx context.Context, id uint) (StateRespInfo, error) {
-	taskState, err := ts.taskRepository.QueryTaskState(ctx, id)
-	respInfo := StateRespInfo{
-		state: taskState,
+func (ts *TaskService) QueryTaskResult(ctx context.Context, id uint) (ResultRespInfo, error) {
+	task, err := ts.taskRepository.QueryTask(ctx, id)
+	if err != nil {
+		return ResultRespInfo{}, err
 	}
-	return respInfo, err
+	resultInfo := ResultRespInfo{
+		state:  task.State,
+		result: task.Result,
+	}
+	return resultInfo, err
 }
 
 func (ts *TaskService) QueryTaskInfo(ctx context.Context, id uint) (*TaskInfo, error) {

@@ -79,5 +79,7 @@ func (tp *taskProcessor) processTask(ctx context.Context, t *asynq.Task) error {
 		log.Printf("Failed to update task %d: %v", taskId, err)
 		return err
 	}
+
+	log.Printf("task %d processed successfully", taskId)
 	return nil
 }

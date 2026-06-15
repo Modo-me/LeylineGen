@@ -8,6 +8,7 @@ type TaskInfo struct {
 }
 
 // TODO: add percentage field
-type StateRespInfo struct {
-	state string
+type ResultRespInfo struct {
+	state  string
+	result TaskResult
 }
