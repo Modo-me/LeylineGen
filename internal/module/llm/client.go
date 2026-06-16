@@ -8,13 +8,17 @@ import (
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 
 	"quest_generator/internal/module/task"
 )
 
-var llmRunner compose.Runnable[map[string]any, *schema.Message]
+var (
+	llmRunner compose.Runnable[map[string]any, *schema.Message]
+	questTool *schema.ToolInfo
+)
 
 func initLLMConfig() *viper.Viper {
 	v := viper.New()
@@ -63,6 +67,8 @@ func init() {
 		panic("failed to compile LLM chain: " + err.Error())
 	}
 	llmRunner = runner
+	questTool = defineToolInfo()
+
 	log.Printf("successfully initialized LLM runner with model %s at %s", modelName, baseURL)
 }
 
@@ -83,11 +89,28 @@ func ProcessTask(worldname, worlddesc, emotion string) (*task.TaskResult, error)
 		"emotion":   emotion,
 	}
 
-	msg, err := llmRunner.Invoke(ctx, input)
+	msg, err := llmRunner.Invoke(ctx, input,
+		compose.WithChatModelOption(
+			model.WithTools([]*schema.ToolInfo{questTool}),
+			model.WithToolChoice(schema.ToolChoiceAllowed),
+		),
+	)
 	if err != nil {
 		return nil, err
 	}
 
+	// Extract structured data from ToolCalls (the model "calls" the tool
+	// with arguments matching our TaskResult schema).
+	if len(msg.ToolCalls) > 0 {
+		tc := msg.ToolCalls[0]
+		var result task.TaskResult
+		if err := json.Unmarshal([]byte(tc.Function.Arguments), &result); err != nil {
+			return nil, err
+		}
+		return &result, nil
+	}
+
+	// Fallback: parse Content as raw JSON (for models that don't support tool calling)
 	var result task.TaskResult
 	if err := json.Unmarshal([]byte(msg.Content), &result); err != nil {
 		return nil, err
