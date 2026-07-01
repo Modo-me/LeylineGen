@@ -57,25 +57,15 @@ func (tp *taskProcessor) processTask(ctx context.Context, t *asynq.Task) error {
 	emotion := taskInfo.Emotion
 
 	result, err := llm.ProcessTask(worldName, worldDesc, emotion)
-
-	var newTask task.Task
-
 	if err != nil {
 		log.Printf("Failed to process task %d: %v", taskId, err)
-		newTask.State = "FAILED"
+		return err
 	}
 
-	newTask = task.Task{
-		ID:        taskId,
-		WorldName: worldName,
-		WorldDesc: worldDesc,
-		Emotion:   emotion,
-		State:     "COMPLETED",
-		Result:    *result,
-	}
-
-	err = tp.taskService.UpdateTask(ctx, &newTask)
-	if err != nil {
+	if err = tp.taskService.UpdateTask(ctx, &task.Task{
+		ID: taskId, WorldName: worldName, WorldDesc: worldDesc, Emotion: emotion,
+		State: "COMPLETED", Result: *result,
+	}); err != nil {
 		log.Printf("Failed to update task %d: %v", taskId, err)
 		return err
 	}

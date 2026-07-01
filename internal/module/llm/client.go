@@ -3,12 +3,13 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"github.com/spf13/viper"
 
@@ -16,7 +17,8 @@ import (
 )
 
 var (
-	llmRunner compose.Runnable[map[string]any, *schema.Message]
+	chain     compose.Runnable[map[string]any, *schema.Message] // 干净 Prompt + Tool 绑定
+	chainJSON compose.Runnable[map[string]any, *schema.Message] // JSON 约束 Prompt（回落用）
 	questTool *schema.ToolInfo
 )
 
@@ -58,15 +60,24 @@ func init() {
 		panic("failed to create chat model: " + err.Error())
 	}
 
-	chain := compose.NewChain[map[string]any, *schema.Message]()
-	chain.AppendChatTemplate(buildPromptTemplate())
-	chain.AppendChatModel(chatModel)
-
-	runner, err := chain.Compile(ctx)
+	// ① 干净 Prompt 链：无 JSON 约束，模型如支持 tool calling 则自然走 ToolCalls
+	c1 := compose.NewChain[map[string]any, *schema.Message]()
+	c1.AppendChatTemplate(buildCleanPromptTemplate())
+	c1.AppendChatModel(chatModel)
+	chain, err = c1.Compile(ctx)
 	if err != nil {
-		panic("failed to compile LLM chain: " + err.Error())
+		panic("failed to compile clean chain: " + err.Error())
 	}
-	llmRunner = runner
+
+	// ② JSON Prompt 链：带结构约束，作为 reasoning 模型的回落
+	c2 := compose.NewChain[map[string]any, *schema.Message]()
+	c2.AppendChatTemplate(buildJSONPromptTemplate())
+	c2.AppendChatModel(chatModel)
+	chainJSON, err = c2.Compile(ctx)
+	if err != nil {
+		panic("failed to compile JSON fallback chain: " + err.Error())
+	}
+
 	questTool = defineToolInfo()
 
 	log.Printf("successfully initialized LLM runner with model %s at %s", modelName, baseURL)
@@ -89,7 +100,8 @@ func ProcessTask(worldname, worlddesc, emotion string) (*task.TaskResult, error)
 		"emotion":   emotion,
 	}
 
-	msg, err := llmRunner.Invoke(ctx, input,
+	// ① 快速路径：干净 Prompt + 工具 → 模型如支持 tool calling 则直接调用
+	msg, err := chain.Invoke(ctx, input,
 		compose.WithChatModelOption(
 			model.WithTools([]*schema.ToolInfo{questTool}),
 			model.WithToolChoice(schema.ToolChoiceAllowed),
@@ -98,22 +110,36 @@ func ProcessTask(worldname, worlddesc, emotion string) (*task.TaskResult, error)
 	if err != nil {
 		return nil, err
 	}
-
-	// Extract structured data from ToolCalls (the model "calls" the tool
-	// with arguments matching our TaskResult schema).
 	if len(msg.ToolCalls) > 0 {
+		log.Printf("successfully invoked task with tool calls: %s", msg.ToolCalls[0].Function.Name)
 		tc := msg.ToolCalls[0]
 		var result task.TaskResult
 		if err := json.Unmarshal([]byte(tc.Function.Arguments), &result); err != nil {
-			return nil, err
+			log.Printf("tool call JSON parse failed: %v\nraw arguments:\n%s", err, tc.Function.Arguments)
+		} else {
+			b, _ := json.MarshalIndent(result, "", "  ")
+			log.Printf("raw json:\n%s", string(b))
+			return &result, nil
 		}
-		return &result, nil
 	}
 
-	// Fallback: parse Content as raw JSON (for models that don't support tool calling)
-	var result task.TaskResult
-	if err := json.Unmarshal([]byte(msg.Content), &result); err != nil {
+	// ② 回落路径：模型不调工具（如 reasoning 模型）→ JSON 约束 Prompt + Content 解析
+	log.Printf("tool call path failed, falling back to JSON-constrained prompt")
+	msg, err = chainJSON.Invoke(ctx, input)
+	if err != nil {
 		return nil, err
 	}
+
+	var result task.TaskResult
+	if err := json.Unmarshal([]byte(msg.Content), &result); err != nil {
+		return nil, errors.New("model returned non-JSON: " + msg.Content)
+	}
+
+	b, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		log.Printf("marshal error: %v", err)
+		return nil, err
+	}
+	log.Printf("raw json:\n%s", string(b))
 	return &result, nil
 }
