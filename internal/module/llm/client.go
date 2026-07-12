@@ -60,7 +60,7 @@ func init() {
 		panic("failed to create chat model: " + err.Error())
 	}
 
-	// ① 干净 Prompt 链：无 JSON 约束，模型如支持 tool calling 则自然走 ToolCalls
+	//干净 Prompt 链：无 JSON 约束，模型如支持 tool calling 则自然走 ToolCalls
 	c1 := compose.NewChain[map[string]any, *schema.Message]()
 	c1.AppendChatTemplate(buildCleanPromptTemplate())
 	c1.AppendChatModel(chatModel)
@@ -69,7 +69,7 @@ func init() {
 		panic("failed to compile clean chain: " + err.Error())
 	}
 
-	// ② JSON Prompt 链：带结构约束，作为 reasoning 模型的回落
+	//SON Prompt 链：带结构约束，作为 reasoning 模型的回落
 	c2 := compose.NewChain[map[string]any, *schema.Message]()
 	c2.AppendChatTemplate(buildJSONPromptTemplate())
 	c2.AppendChatModel(chatModel)
@@ -123,7 +123,7 @@ func ProcessTask(worldname, worlddesc, emotion string) (*task.TaskResult, error)
 		}
 	}
 
-	// ② 回落路径：模型不调工具（如 reasoning 模型）→ JSON 约束 Prompt + Content 解析
+	//回落路径：模型不调工具（如 reasoning 模型）→ JSON 约束 Prompt + Content 解析
 	log.Printf("tool call path failed, falling back to JSON-constrained prompt")
 	msg, err = chainJSON.Invoke(ctx, input)
 	if err != nil {

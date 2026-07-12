@@ -3,7 +3,7 @@ package producer
 import (
 	"encoding/json"
 	"log"
-	"quest_generator/internal/asynq/queue_common"
+	"quest_generator/internal/async_queue/queue_common"
 
 	"github.com/hibiken/asynq"
 )
@@ -25,9 +25,9 @@ func (p *Producer) EnqueueTask(taskID uint) error {
 	newTask := asynq.NewTask(queue_common.TypeTaskProcess, payload)
 	taskInfo, err := p.client.Enqueue(newTask)
 	if err != nil {
-		log.Printf("asynq: Failed to enqueue asynq newTask %d: %v", taskID, err)
+		log.Printf("async_queue: Failed to enqueue async_queue newTask %d: %v", taskID, err)
 	} else {
-		log.Printf("asynq: Enqueued asynq newTask %d (asynq ID: %v)", taskID, taskInfo.ID)
+		log.Printf("async_queue: Enqueued async_queue newTask %d (async_queue ID: %v)", taskID, taskInfo.ID)
 	}
 	return err
 }
