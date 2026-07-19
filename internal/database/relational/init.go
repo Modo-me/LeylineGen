@@ -2,6 +2,7 @@ package relational
 
 import (
 	"fmt"
+	"quest_generator/internal/module/world_graph"
 	"strings"
 
 	"quest_generator/internal/module/task"
@@ -37,11 +38,15 @@ func DbInit() *gorm.DB {
 }
 
 func dbSync(db *gorm.DB) error {
-	return db.AutoMigrate(&task.Task{})
+	return db.AutoMigrate(
+		&task.Task{},
+		&world_graph.Quest{},
+		&world_graph.Npc{},
+		&world_graph.Step{},
+	)
 }
 
 func initConfig() {
-	// Defaults match the original hardcoded DSN values
 	viper.SetDefault("relational_database.user", "username")
 	viper.SetDefault("relational_database.password", "psw")
 	viper.SetDefault("relational_database.host", "localhost")
@@ -49,16 +54,13 @@ func initConfig() {
 	viper.SetDefault("relational_database.dbname", "yourDbName")
 	viper.SetDefault("relational_database.sslmode", "disable")
 
-	// config.yaml (optional) overrides defaults
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
-	_ = viper.ReadInConfig() // ignore missing file
+	_ = viper.ReadInConfig()
 
-	// Env var DB_HOST overrides database.host (backward compat)
 	_ = viper.BindEnv("database.host", "DB_HOST")
 
-	// All database.* fields can also be overridden by DATABASE_* env vars
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 }

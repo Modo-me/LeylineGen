@@ -5,14 +5,16 @@ import (
 	"fmt"
 
 	"github.com/neo4j/neo4j-go-driver/v6/neo4j"
+	"gorm.io/gorm"
 )
 
 type Repository struct {
 	driver neo4j.Driver
+	db     *gorm.DB
 }
 
-func NewRepository(driver neo4j.Driver) *Repository {
-	return &Repository{driver: driver}
+func NewRepository(driver neo4j.Driver, db *gorm.DB) *Repository {
+	return &Repository{driver: driver, db: db}
 }
 
 func safeString(record *neo4j.Record, key string) string {
@@ -24,6 +26,15 @@ func safeString(record *neo4j.Record, key string) string {
 	return s
 }
 
+func safeInt64(record *neo4j.Record, key string) int64 {
+	val, ok := record.Get(key)
+	if !ok || val == nil {
+		return 0
+	}
+	i, _ := val.(int64)
+	return i
+}
+
 // GetConnectedVillages returns all VillageNodes directly connected to the
 // given node via a Connected relationship.
 func (r *Repository) GetConnectedVillages(ctx context.Context, node VillageNode) ([]VillageNode, error) {
@@ -32,8 +43,8 @@ func (r *Repository) GetConnectedVillages(ctx context.Context, node VillageNode)
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[r:Connected]->(connected:Village)
-		 RETURN connected.Id AS Id, connected.Name AS Name`,
-		map[string]any{"id": node.Id},
+		 RETURN connected.ID AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
+		map[string]any{"id": node.ID},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get connected villages: %w", err)
@@ -43,8 +54,10 @@ func (r *Repository) GetConnectedVillages(ctx context.Context, node VillageNode)
 	for result.Next(ctx) {
 		record := result.Record()
 		nodes = append(nodes, VillageNode{
-			Id:   safeString(record, "Id"),
+			ID:   safeInt64(record, "Id"),
 			Name: safeString(record, "Name"),
+			X:    safeInt64(record, "X"),
+			Z:    safeInt64(record, "Z"),
 		})
 	}
 	if err := result.Err(); err != nil {
@@ -53,16 +66,17 @@ func (r *Repository) GetConnectedVillages(ctx context.Context, node VillageNode)
 	return nodes, nil
 }
 
-// GetConnectedVillageByDirection returns the VillageNode connected to the given node
-// via a Connected relationship whose properties match the provided rel.
+// GetConnectedVillageByDirection returns the VillageNode connected to the
+// given node via a Connected relationship whose properties match the
+// provided rel.
 func (r *Repository) GetConnectedVillageByDirection(ctx context.Context, node VillageNode, rel ConnectedRel) (*VillageNode, error) {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[r:Connected {Direction: $dir}]->(connected:Village)
-		 RETURN connected.Id AS Id, connected.Name AS Name`,
-		map[string]any{"id": node.Id, "dir": rel.Direction},
+		 RETURN connected.ID AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
+		map[string]any{"id": node.ID, "dir": rel.Direction},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get connected village: %w", err)
@@ -77,8 +91,10 @@ func (r *Repository) GetConnectedVillageByDirection(ctx context.Context, node Vi
 
 	record := result.Record()
 	return &VillageNode{
-		Id:   safeString(record, "Id"),
+		ID:   safeInt64(record, "Id"),
 		Name: safeString(record, "Name"),
+		X:    safeInt64(record, "X"),
+		Z:    safeInt64(record, "Z"),
 	}, nil
 }
 
@@ -90,7 +106,7 @@ func (r *Repository) GetPlayerConnectedVillages(ctx context.Context) ([]VillageN
 
 	result, err := session.Run(ctx,
 		`MATCH (p:player)-[:Connected]->(v:Village)
-		 RETURN v.Id AS Id, v.Name AS Name`,
+		 RETURN v.ID AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
 		nil,
 	)
 	if err != nil {
@@ -101,8 +117,10 @@ func (r *Repository) GetPlayerConnectedVillages(ctx context.Context) ([]VillageN
 	for result.Next(ctx) {
 		record := result.Record()
 		nodes = append(nodes, VillageNode{
-			Id:   safeString(record, "Id"),
+			ID:   safeInt64(record, "Id"),
 			Name: safeString(record, "Name"),
+			X:    safeInt64(record, "X"),
+			Z:    safeInt64(record, "Z"),
 		})
 	}
 	if err := result.Err(); err != nil {
@@ -111,16 +129,16 @@ func (r *Repository) GetPlayerConnectedVillages(ctx context.Context) ([]VillageN
 	return nodes, nil
 }
 
-// GetAllNpcsInVillage returns all NpcNodes connected to the given VillageNode via a
-// HasNpc relationship.
+// GetAllNpcsInVillage returns all NpcNodes connected to the given VillageNode
+// via a HasNpc relationship.
 func (r *Repository) GetAllNpcsInVillage(ctx context.Context, node VillageNode) ([]NpcNode, error) {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[:HasNpc]->(n:Npc)
-		 RETURN n.Id AS Id`,
-		map[string]any{"id": node.Id},
+		 RETURN n.ID AS Id, n.Name AS Name`,
+		map[string]any{"id": node.ID},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get npcs: %w", err)
@@ -129,12 +147,43 @@ func (r *Repository) GetAllNpcsInVillage(ctx context.Context, node VillageNode) 
 	var nodes []NpcNode
 	for result.Next(ctx) {
 		record := result.Record()
-		nodes = append(nodes, NpcNode{Id: safeString(record, "Id")})
+		nodes = append(nodes, NpcNode{
+			ID:   safeInt64(record, "Id"),
+			Name: safeString(record, "Name"),
+		})
 	}
 	if err := result.Err(); err != nil {
 		return nil, fmt.Errorf("iterate npcs: %w", err)
 	}
 	return nodes, nil
+}
+
+// GetNpcNodeByID returns the NpcNode with the given ID.
+func (r *Repository) GetNpcNodeByID(ctx context.Context, id int64) (*NpcNode, error) {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx,
+		`MATCH (n:Npc {Id: $id})
+		 RETURN n.ID AS Id, n.Name AS Name`,
+		map[string]any{"id": id},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get npc node: %w", err)
+	}
+
+	if !result.Next(ctx) {
+		if err := result.Err(); err != nil {
+			return nil, fmt.Errorf("iterate npc node: %w", err)
+		}
+		return nil, nil
+	}
+
+	record := result.Record()
+	return &NpcNode{
+		ID:   safeInt64(record, "Id"),
+		Name: safeString(record, "Name"),
+	}, nil
 }
 
 // GetVillageByNpc returns the VillageNode that hosts the given NpcNode via a
@@ -145,8 +194,8 @@ func (r *Repository) GetVillageByNpc(ctx context.Context, node NpcNode) (*Villag
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village)-[:HasNpc]->(n:Npc {Id: $id})
-		 RETURN v.Id AS Id, v.Name AS Name`,
-		map[string]any{"id": node.Id},
+		 RETURN v.ID AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
+		map[string]any{"id": node.ID},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get village: %w", err)
@@ -161,13 +210,15 @@ func (r *Repository) GetVillageByNpc(ctx context.Context, node NpcNode) (*Villag
 
 	record := result.Record()
 	return &VillageNode{
-		Id:   safeString(record, "Id"),
+		ID:   safeInt64(record, "Id"),
 		Name: safeString(record, "Name"),
+		X:    safeInt64(record, "X"),
+		Z:    safeInt64(record, "Z"),
 	}, nil
 }
 
-// GetConnectedRel returns the ConnectedRel between two VillageNodes.
-// It matches regardless of the relationship's arrow direction.
+// GetConnectedRel returns the ConnectedRel between two VillageNodes,
+// matching from source toward target.
 func (r *Repository) GetConnectedRel(ctx context.Context, source, target VillageNode) (*ConnectedRel, error) {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
@@ -177,7 +228,7 @@ func (r *Repository) GetConnectedRel(ctx context.Context, source, target Village
 		 MATCH (v1)-[r:Connected]->(v2)
 		 RETURN r.Direction AS Direction
 		 LIMIT 1`,
-		map[string]any{"sourceId": source.Id, "targetId": target.Id},
+		map[string]any{"sourceId": source.ID, "targetId": target.ID},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get connected rel: %w", err)
@@ -194,4 +245,38 @@ func (r *Repository) GetConnectedRel(ctx context.Context, source, target Village
 	return &ConnectedRel{
 		Direction: safeString(record, "Direction"),
 	}, nil
+}
+
+func (r *Repository) CreateNpc(ctx context.Context, npc *Npc) (int64, error) {
+	result := r.db.WithContext(ctx).Create(npc)
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	return npc.ID, nil
+}
+
+func (r *Repository) QueryNpcByID(ctx context.Context, id int64) (*Npc, error) {
+	var npc Npc
+	result := r.db.WithContext(ctx).First(&npc, id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &npc, nil
+}
+
+func (r *Repository) CreateStep(ctx context.Context, step *Step) error {
+	return r.db.WithContext(ctx).Create(step).Error
+}
+
+func (r *Repository) CreateQuest(ctx context.Context, quest *Quest) error {
+	return r.db.WithContext(ctx).Create(quest).Error
+}
+
+func (r *Repository) QueryQuest(ctx context.Context, id int64) (*Quest, error) {
+	var quest Quest
+	result := r.db.WithContext(ctx).Preload("Steps.Npc").First(&quest, id)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &quest, nil
 }
