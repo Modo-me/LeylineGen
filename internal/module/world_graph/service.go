@@ -7,12 +7,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// StepInput carries the data needed to create a single Quest step.
-type StepInput struct {
-	NpcID         int64
-	DialogueLines []string
-}
-
 type service struct {
 	Repository *Repository
 }
@@ -21,9 +15,13 @@ func NewService(repo *Repository) *service {
 	return &service{Repository: repo}
 }
 
-// CreateQuest creates a Quest along with NPC and Step records in a single
+var (
+	questID int64 = 1
+)
+
+// SaveQuest creates a Quest along with NPC and Step records in a single
 // transaction and returns the new quest ID.
-func (s *service) CreateQuest(ctx context.Context, steps []StepInput) (int64, error) {
+func (s *service) SaveQuest(ctx context.Context, steps []StepInput) (int64, error) {
 	var quest Quest
 	err := s.Repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		seen := make(map[int64]bool)
@@ -57,12 +55,13 @@ func (s *service) CreateQuest(ctx context.Context, steps []StepInput) (int64, er
 	if err != nil {
 		return 0, err
 	}
+	questID = quest.ID
 	return quest.ID, nil
 }
 
 // BuildResult aggregates data from the relational store and world_graph to
 // produce the final Result for a given quest.
-func (s *service) BuildResult(ctx context.Context, questID int64) (*Result, error) {
+func (s *service) BuildResult(ctx context.Context) (*Result, error) {
 	relQuest, err := s.Repository.QueryQuest(ctx, questID)
 	if err != nil {
 		return nil, fmt.Errorf("query quest %d: %w", questID, err)

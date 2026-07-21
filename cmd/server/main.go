@@ -5,6 +5,7 @@ import (
 	"quest_generator/internal/database/graph"
 	"quest_generator/internal/database/relational"
 	"quest_generator/internal/module/task"
+	"quest_generator/internal/module/world_graph"
 	"quest_generator/internal/router"
 )
 
@@ -31,9 +32,15 @@ func main() {
 	// Initialize queue consumer
 	consumerInit(redisAddr, taskService)
 
+	// Initialize world_graph
+	wgRepo := world_graph.NewRepository(driver, db)
+	wgSvc := world_graph.NewService(wgRepo)
+	wgHandler := world_graph.NewHandler(wgSvc)
+
 	// Set up routers
 	handlers := &router.Handlers{
-		TaskHandler: taskHandler,
+		TaskHandler:  taskHandler,
+		QuestHandler: wgHandler,
 	}
 	routers := router.SetUpRouters(handlers)
 

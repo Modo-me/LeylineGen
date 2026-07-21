@@ -5,8 +5,22 @@ type Relationship interface {
 	Properties() map[string]any
 }
 
+// direction represents a compass direction stored on a ConnectedRel.
+type direction string
+
+const (
+	North     direction = "north"
+	Northeast direction = "northeast"
+	East      direction = "east"
+	Southeast direction = "southeast"
+	South     direction = "south"
+	Southwest direction = "southwest"
+	West      direction = "west"
+	Northwest direction = "northwest"
+)
+
 type ConnectedRel struct {
-	Direction string
+	Direction direction
 }
 
 func (c ConnectedRel) Type() string {
@@ -40,21 +54,4 @@ type VillageNode struct {
 	Name string `json:"name"`
 	X    int64  `json:"x"`
 	Z    int64  `json:"z"`
-}
-
-type Npc struct {
-	ID int64 `gorm:"primaryKey" json:"id"`
-}
-
-type Step struct {
-	ID            int64    `gorm:"primaryKey" json:"id"`
-	QuestID       int64    `gorm:"index" json:"quest_id"`
-	NpcID         int64    `gorm:"index" json:"npc_id"`
-	DialogueLines []string `gorm:"serializer:json" json:"dialogue_lines"`
-	Npc           Npc      `gorm:"foreignKey:NpcID" json:"npc"`
-}
-
-type Quest struct {
-	ID    int64  `gorm:"primaryKey" json:"id"`
-	Steps []Step `gorm:"foreignKey:QuestID" json:"steps"`
 }

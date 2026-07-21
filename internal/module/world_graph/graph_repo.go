@@ -76,7 +76,7 @@ func (r *Repository) GetConnectedVillageByDirection(ctx context.Context, node Vi
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[r:Connected {Direction: $dir}]->(connected:Village)
 		 RETURN connected.ID AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
-		map[string]any{"id": node.ID, "dir": rel.Direction},
+		map[string]any{"id": node.ID, "dir": string(rel.Direction)},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get connected village: %w", err)
@@ -243,40 +243,32 @@ func (r *Repository) GetConnectedRel(ctx context.Context, source, target Village
 
 	record := result.Record()
 	return &ConnectedRel{
-		Direction: safeString(record, "Direction"),
+		Direction: direction(safeString(record, "Direction")),
 	}, nil
 }
 
-func (r *Repository) CreateNpc(ctx context.Context, npc *Npc) (int64, error) {
-	result := r.db.WithContext(ctx).Create(npc)
-	if result.Error != nil {
-		return 0, result.Error
+// CreateNpcNodeByVillage creates a Npc node in Neo4j and links it to the
+// specified Village via a HasNpc relationship.
+func (r *Repository) CreateNpcNodeByVillage(ctx context.Context, node *NpcNode, villageID int64) error {
+	if node == nil {
+		return fmt.Errorf("npc node is nil")
 	}
-	return npc.ID, nil
-}
 
-func (r *Repository) QueryNpcByID(ctx context.Context, id int64) (*Npc, error) {
-	var npc Npc
-	result := r.db.WithContext(ctx).First(&npc, id)
-	if result.Error != nil {
-		return nil, result.Error
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.Run(ctx,
+		`MATCH (v:Village {Id: $villageId})
+		 CREATE (v)-[:HasNpc]->(n:Npc {Id: $npcId, Name: $npcName})
+		 RETURN n`,
+		map[string]any{
+			"villageId": villageID,
+			"npcId":     node.ID,
+			"npcName":   node.Name,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create npc node by village: %w", err)
 	}
-	return &npc, nil
-}
-
-func (r *Repository) CreateStep(ctx context.Context, step *Step) error {
-	return r.db.WithContext(ctx).Create(step).Error
-}
-
-func (r *Repository) CreateQuest(ctx context.Context, quest *Quest) error {
-	return r.db.WithContext(ctx).Create(quest).Error
-}
-
-func (r *Repository) QueryQuest(ctx context.Context, id int64) (*Quest, error) {
-	var quest Quest
-	result := r.db.WithContext(ctx).Preload("Steps.Npc").First(&quest, id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &quest, nil
+	return nil
 }
