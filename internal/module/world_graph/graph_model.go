@@ -55,3 +55,8 @@ type VillageNode struct {
 	X    int64  `json:"x"`
 	Z    int64  `json:"z"`
 }
+
+type PlayerNode struct {
+	X int64 `json:"x"`
+	Z int64 `json:"z"`
+}

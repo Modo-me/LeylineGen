@@ -3,10 +3,12 @@ package consumer
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"quest_generator/internal/async_queue/queue_common"
 	"quest_generator/internal/module/agent"
 	"quest_generator/internal/module/task"
+	"quest_generator/internal/module/world_graph"
 
 	"github.com/hibiken/asynq"
 )
@@ -24,8 +26,8 @@ func NewWorker(redisAddr string) *asynq.Server {
 	)
 }
 
-func NewProcessHandler(taskService *task.TaskService) *asynq.ServeMux {
-	tp := &taskProcessor{taskService: taskService}
+func NewProcessHandler(taskService *task.TaskService, wgSvc *world_graph.Service) *asynq.ServeMux {
+	tp := &taskProcessor{taskService: taskService, wgSvc: wgSvc}
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(queue_common.TypeTaskProcess, tp.processTask)
 	return mux
@@ -33,6 +35,7 @@ func NewProcessHandler(taskService *task.TaskService) *asynq.ServeMux {
 
 type taskProcessor struct {
 	taskService *task.TaskService
+	wgSvc       *world_graph.Service
 }
 
 func (tp *taskProcessor) processTask(ctx context.Context, t *asynq.Task) error {
@@ -48,8 +51,14 @@ func (tp *taskProcessor) processTask(ctx context.Context, t *asynq.Task) error {
 		return err
 	}
 
-	err = agent.ProcessTask(ctx, taskInfo.WorldName, taskInfo.WorldDesc, taskInfo.Emotion)
-	if err != nil {
+	// Build the world graph connections.
+	if tp.wgSvc != nil {
+		if err := tp.wgSvc.BuildWorldGraph(ctx); err != nil {
+			return fmt.Errorf("build world graph: %w", err)
+		}
+	}
+
+	if err = agent.ProcessTask(ctx, taskInfo.WorldName, taskInfo.WorldDesc, taskInfo.Emotion); err != nil {
 		log.Printf("Failed to process task %d: %v", taskId, err)
 		return err
 	}

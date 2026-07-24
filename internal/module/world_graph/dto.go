@@ -34,3 +34,8 @@ type VillageCreationRequest struct {
 	X int64 `json:"x"`
 	Z int64 `json:"z"`
 }
+
+type PlayerCreationRequest struct {
+	X int64 `json:"x"`
+	Z int64 `json:"z"`
+}

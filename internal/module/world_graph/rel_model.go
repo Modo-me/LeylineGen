@@ -6,7 +6,7 @@ type Npc struct {
 
 type Step struct {
 	ID            int64    `gorm:"primaryKey" json:"id"`
-	QuestID       int64    `gorm:"index" json:"quest_id"`
+	QuestID       *int64   `gorm:"index" json:"quest_id"`
 	NpcID         int64    `gorm:"index" json:"npc_id"`
 	DialogueLines []string `gorm:"serializer:json" json:"dialogue_lines"`
 	Npc           Npc      `gorm:"foreignKey:NpcID" json:"npc"`

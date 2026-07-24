@@ -19,6 +19,7 @@ func SetUpRouters(h *Handlers) *gin.Engine {
 		api.POST("/tasks", h.TaskHandler.CreateTask)
 		api.GET("/quest/result", h.QuestHandler.GetResult)
 		api.POST("/village", h.QuestHandler.CreateVillage)
+		api.POST("/player", h.QuestHandler.CreatePlayer)
 	}
 	return router
 }

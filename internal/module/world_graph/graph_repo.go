@@ -257,7 +257,7 @@ func (r *Repository) CreateNpcNodeByVillage(ctx context.Context, node *NpcNode, 
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	_, err := session.Run(ctx,
+	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $villageId})
 		 CREATE (v)-[:HasNpc]->(n:Npc {Id: $npcId, Name: $npcName})
 		 RETURN n`,
@@ -269,6 +269,14 @@ func (r *Repository) CreateNpcNodeByVillage(ctx context.Context, node *NpcNode, 
 	)
 	if err != nil {
 		return fmt.Errorf("create npc node by village: %w", err)
+	}
+
+	summary, err := result.Consume(ctx)
+	if err != nil {
+		return fmt.Errorf("consume npc result: %w", err)
+	}
+	if summary.Counters().NodesCreated() == 0 {
+		return fmt.Errorf("village %d not found in Neo4j: MATCH returned no nodes", villageID)
 	}
 	return nil
 }
@@ -297,7 +305,7 @@ func (r *Repository) CreateVillageNode(ctx context.Context, node *VillageNode) e
 	return nil
 }
 
-func (r *Repository) CreateConnectedRel(ctx context.Context, source, target VillageNode, rel ConnectedRel) error {
+func (r *Repository) CreateConnectedRel(ctx context.Context, source, target *VillageNode, rel ConnectedRel) error {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
@@ -313,6 +321,156 @@ func (r *Repository) CreateConnectedRel(ctx context.Context, source, target Vill
 	)
 	if err != nil {
 		return fmt.Errorf("create connected rel: %w", err)
+	}
+	return nil
+}
+
+// CreatePlayerNode creates or updates the singleton player node with the
+// given X, Z coordinates.
+func (r *Repository) CreatePlayerNode(ctx context.Context, node *PlayerNode) error {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.Run(ctx,
+		`MERGE (p:player)
+		 SET p.X = $x, p.Z = $z`,
+		map[string]any{"x": node.X, "z": node.Z},
+	)
+	if err != nil {
+		return fmt.Errorf("create player node: %w", err)
+	}
+	return nil
+}
+
+// QueryAllVillages returns every Village node in the graph.
+func (r *Repository) QueryAllVillages(ctx context.Context) ([]VillageNode, error) {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx,
+		`MATCH (v:Village)
+		 RETURN v.ID AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query all villages: %w", err)
+	}
+
+	var nodes []VillageNode
+	for result.Next(ctx) {
+		record := result.Record()
+		nodes = append(nodes, VillageNode{
+			ID:   safeInt64(record, "Id"),
+			Name: safeString(record, "Name"),
+			X:    safeInt64(record, "X"),
+			Z:    safeInt64(record, "Z"),
+		})
+	}
+	if err := result.Err(); err != nil {
+		return nil, fmt.Errorf("iterate villages: %w", err)
+	}
+	return nodes, nil
+}
+
+// QueryPlayerNode returns the singleton player node with its coordinates.
+func (r *Repository) QueryPlayerNode(ctx context.Context) (*PlayerNode, error) {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx,
+		`MATCH (p:player)
+		 RETURN p.X AS X, p.Z AS Z`,
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query player node: %w", err)
+	}
+
+	if !result.Next(ctx) {
+		if err := result.Err(); err != nil {
+			return nil, fmt.Errorf("iterate player node: %w", err)
+		}
+		return nil, nil
+	}
+
+	record := result.Record()
+	return &PlayerNode{
+		X: safeInt64(record, "X"),
+		Z: safeInt64(record, "Z"),
+	}, nil
+}
+
+// CreateVillageToVillageRel creates a directed Connected relationship from
+// source village to target village with the given compass direction.
+func (r *Repository) CreateVillageToVillageRel(ctx context.Context, sourceID, targetID int64, dir direction) error {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx,
+		`MATCH (v1:Village {Id: $sid}), (v2:Village {Id: $tid})
+		 CREATE (v1)-[:Connected {Direction: $dir}]->(v2)`,
+		map[string]any{"sid": sourceID, "tid": targetID, "dir": string(dir)},
+	)
+	if err != nil {
+		return fmt.Errorf("create village→village rel: %w", err)
+	}
+
+	summary, err := result.Consume(ctx)
+	if err != nil {
+		return fmt.Errorf("consume village-village rel: %w", err)
+	}
+	if summary.Counters().RelationshipsCreated() == 0 {
+		return fmt.Errorf("village %d or %d not found in Neo4j", sourceID, targetID)
+	}
+	return nil
+}
+
+// CreatePlayerToVillageRel creates a directed Connected relationship from
+// the player node to the given village.
+func (r *Repository) CreatePlayerToVillageRel(ctx context.Context, villageID int64, dir direction) error {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx,
+		`MATCH (p:player), (v:Village {Id: $vid})
+		 CREATE (p)-[:Connected {Direction: $dir}]->(v)`,
+		map[string]any{"vid": villageID, "dir": string(dir)},
+	)
+	if err != nil {
+		return fmt.Errorf("create player→village rel: %w", err)
+	}
+
+	summary, err := result.Consume(ctx)
+	if err != nil {
+		return fmt.Errorf("consume player-village rel: %w", err)
+	}
+	if summary.Counters().RelationshipsCreated() == 0 {
+		return fmt.Errorf("player node or village %d not found in Neo4j", villageID)
+	}
+	return nil
+}
+
+// CreateVillageToPlayerRel creates a directed Connected relationship from
+// the given village to the player node.
+func (r *Repository) CreateVillageToPlayerRel(ctx context.Context, villageID int64, dir direction) error {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx,
+		`MATCH (v:Village {Id: $vid}), (p:player)
+		 CREATE (v)-[:Connected {Direction: $dir}]->(p)`,
+		map[string]any{"vid": villageID, "dir": string(dir)},
+	)
+	if err != nil {
+		return fmt.Errorf("create village→player rel: %w", err)
+	}
+
+	summary, err := result.Consume(ctx)
+	if err != nil {
+		return fmt.Errorf("consume village-player rel: %w", err)
+	}
+	if summary.Counters().RelationshipsCreated() == 0 {
+		return fmt.Errorf("village %d or player node not found in Neo4j", villageID)
 	}
 	return nil
 }

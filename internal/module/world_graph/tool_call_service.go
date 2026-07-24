@@ -1,6 +1,9 @@
 package world_graph
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 // ObservePlayerNearbyWorld returns the villages connected to the player node.
 func (s *Service) ObservePlayerNearbyWorld(ctx context.Context) (*NearbyWorldInfo, error) {
@@ -53,6 +56,9 @@ func (s *Service) ObserveVillageNearbyWorld(ctx context.Context, villageID int64
 func (s *Service) CreateNewNpc(ctx context.Context, npcName string, villageID int64) (int64, error) {
 	npc := &Npc{}
 	ID, err := s.Repository.CreateNpc(ctx, npc)
+	if err != nil {
+		return 0, fmt.Errorf("create npc: %w", err)
+	}
 	npcNode := &NpcNode{
 		ID:   ID,
 		Name: npcName,
@@ -65,15 +71,9 @@ func (s *Service) CreateNewNpc(ctx context.Context, npcName string, villageID in
 }
 
 func (s *Service) CreateStepWithNpc(ctx context.Context, npcID int64, dialogueLines []string) error {
-	step := &Step{
+	steps = append(steps, Step{
 		NpcID:         npcID,
 		DialogueLines: dialogueLines,
-		Npc:           Npc{ID: npcID},
-	}
-	err := s.Repository.CreateStep(ctx, step)
-	if err != nil {
-		return err
-	}
-	steps = append(steps, *step)
+	})
 	return nil
 }

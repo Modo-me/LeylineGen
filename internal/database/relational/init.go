@@ -40,6 +40,7 @@ func DbInit() *gorm.DB {
 func dbSync(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&task.Task{},
+		&world_graph.Village{},
 		&world_graph.Quest{},
 		&world_graph.Npc{},
 		&world_graph.Step{},

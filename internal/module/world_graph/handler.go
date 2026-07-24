@@ -40,3 +40,17 @@ func (h *Handler) CreateVillage(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, gin.H{"status": "ok"})
 }
+
+// CreatePlayer handles POST /api/player.
+func (h *Handler) CreatePlayer(c *gin.Context) {
+	var req PlayerCreationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.svc.CreatePlayer(c.Request.Context(), &req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"status": "ok"})
+}

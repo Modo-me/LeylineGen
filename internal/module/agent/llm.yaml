@@ -1,9 +1,9 @@
-llm:
+
   # OpenAI-compatible API endpoint
   base_url: "https://api.deepseek.com"
 
   # API key (required)
-  api_key: "sk-86f231e6a05245109372a8dfdb481fea"
+  api_key: "sk-5227c365abdb4a6da449f18fb9ad5396"
 
   # Model name
   model: "deepseek-v4-flash"

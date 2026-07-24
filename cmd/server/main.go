@@ -32,7 +32,7 @@ func main() {
 	agent.Init(wgSvc)
 	wgHandler := world_graph.NewHandler(wgSvc)
 
-	consumerInit(redisAddr, taskService)
+	consumerInit(redisAddr, taskService, wgSvc)
 
 	handlers := &router.Handlers{
 		TaskHandler:  taskHandler,
