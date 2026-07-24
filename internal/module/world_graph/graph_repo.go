@@ -9,12 +9,12 @@ import (
 )
 
 type Repository struct {
-	driver neo4j.Driver
+	driver grapher
 	db     *gorm.DB
 }
 
 func NewRepository(driver neo4j.Driver, db *gorm.DB) *Repository {
-	return &Repository{driver: driver, db: db}
+	return &Repository{driver: &neo4jGrapher{inner: driver}, db: db}
 }
 
 func safeString(record *neo4j.Record, key string) string {
@@ -43,7 +43,7 @@ func (r *Repository) GetConnectedVillages(ctx context.Context, node VillageNode)
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[r:Connected]->(connected:Village)
-		 RETURN connected.ID AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
+		 RETURN connected.Id AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
 		map[string]any{"id": node.ID},
 	)
 	if err != nil {
@@ -75,7 +75,7 @@ func (r *Repository) GetConnectedVillageByDirection(ctx context.Context, node Vi
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[r:Connected {Direction: $dir}]->(connected:Village)
-		 RETURN connected.ID AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
+		 RETURN connected.Id AS Id, connected.Name AS Name, connected.X AS X, connected.Z AS Z`,
 		map[string]any{"id": node.ID, "dir": string(rel.Direction)},
 	)
 	if err != nil {
@@ -106,7 +106,7 @@ func (r *Repository) GetPlayerConnectedVillages(ctx context.Context) ([]VillageN
 
 	result, err := session.Run(ctx,
 		`MATCH (p:player)-[:Connected]->(v:Village)
-		 RETURN v.ID AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
+		 RETURN v.Id AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
 		nil,
 	)
 	if err != nil {
@@ -137,7 +137,7 @@ func (r *Repository) GetAllNpcsInVillage(ctx context.Context, node VillageNode) 
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $id})-[:HasNpc]->(n:Npc)
-		 RETURN n.ID AS Id, n.Name AS Name`,
+		 RETURN n.Id AS Id, n.Name AS Name`,
 		map[string]any{"id": node.ID},
 	)
 	if err != nil {
@@ -165,7 +165,7 @@ func (r *Repository) GetNpcNodeByID(ctx context.Context, id int64) (*NpcNode, er
 
 	result, err := session.Run(ctx,
 		`MATCH (n:Npc {Id: $id})
-		 RETURN n.ID AS Id, n.Name AS Name`,
+		 RETURN n.Id AS Id, n.Name AS Name`,
 		map[string]any{"id": id},
 	)
 	if err != nil {
@@ -194,7 +194,7 @@ func (r *Repository) GetVillageByNpc(ctx context.Context, node NpcNode) (*Villag
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village)-[:HasNpc]->(n:Npc {Id: $id})
-		 RETURN v.ID AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
+		 RETURN v.Id AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
 		map[string]any{"id": node.ID},
 	)
 	if err != nil {
@@ -257,10 +257,11 @@ func (r *Repository) CreateNpcNodeByVillage(ctx context.Context, node *NpcNode, 
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	result, err := session.Run(ctx,
+	_, err := session.Run(ctx,
 		`MATCH (v:Village {Id: $villageId})
-		 CREATE (v)-[:HasNpc]->(n:Npc {Id: $npcId, Name: $npcName})
-		 RETURN n`,
+		 MERGE (n:Npc {Id: $npcId})
+		 ON CREATE SET n.Name = $npcName
+		 MERGE (v)-[:HasNpc]->(n)`,
 		map[string]any{
 			"villageId": villageID,
 			"npcId":     node.ID,
@@ -270,14 +271,7 @@ func (r *Repository) CreateNpcNodeByVillage(ctx context.Context, node *NpcNode, 
 	if err != nil {
 		return fmt.Errorf("create npc node by village: %w", err)
 	}
-
-	summary, err := result.Consume(ctx)
-	if err != nil {
-		return fmt.Errorf("consume npc result: %w", err)
-	}
-	if summary.Counters().NodesCreated() == 0 {
-		return fmt.Errorf("village %d not found in Neo4j: MATCH returned no nodes", villageID)
-	}
+	return nil
 	return nil
 }
 
@@ -289,7 +283,7 @@ func (r *Repository) CreateVillageNode(ctx context.Context, node *VillageNode) e
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	_, err := session.Run(ctx,
+	result, err := session.Run(ctx,
 		`CREATE (v:Village {Id: $id, Name: $name, X: $x, Z: $z})
 		 RETURN v`,
 		map[string]any{
@@ -302,25 +296,8 @@ func (r *Repository) CreateVillageNode(ctx context.Context, node *VillageNode) e
 	if err != nil {
 		return fmt.Errorf("create village node: %w", err)
 	}
-	return nil
-}
-
-func (r *Repository) CreateConnectedRel(ctx context.Context, source, target *VillageNode, rel ConnectedRel) error {
-	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
-	defer session.Close(ctx)
-
-	_, err := session.Run(ctx,
-		`MATCH (v1:Village {Id: $sourceId}), (v2:Village {Id: $targetId})
-		 CREATE (v1)-[:Connected {Direction: $direction}]->(v2)
-		 RETURN v1, v2`,
-		map[string]any{
-			"sourceId":  source.ID,
-			"targetId":  target.ID,
-			"direction": string(rel.Direction),
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("create connected rel: %w", err)
+	if _, err = result.Consume(ctx); err != nil {
+		return fmt.Errorf("consume village result: %w", err)
 	}
 	return nil
 }
@@ -331,13 +308,20 @@ func (r *Repository) CreatePlayerNode(ctx context.Context, node *PlayerNode) err
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
 
-	_, err := session.Run(ctx,
+	if node == nil {
+		return fmt.Errorf("player node is nil")
+	}
+
+	result, err := session.Run(ctx,
 		`MERGE (p:player)
 		 SET p.X = $x, p.Z = $z`,
 		map[string]any{"x": node.X, "z": node.Z},
 	)
 	if err != nil {
 		return fmt.Errorf("create player node: %w", err)
+	}
+	if _, err = result.Consume(ctx); err != nil {
+		return fmt.Errorf("consume player result: %w", err)
 	}
 	return nil
 }
@@ -349,7 +333,7 @@ func (r *Repository) QueryAllVillages(ctx context.Context) ([]VillageNode, error
 
 	result, err := session.Run(ctx,
 		`MATCH (v:Village)
-		 RETURN v.ID AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
+		 RETURN v.Id AS Id, v.Name AS Name, v.X AS X, v.Z AS Z`,
 		nil,
 	)
 	if err != nil {
@@ -400,8 +384,6 @@ func (r *Repository) QueryPlayerNode(ctx context.Context) (*PlayerNode, error) {
 	}, nil
 }
 
-// CreateVillageToVillageRel creates a directed Connected relationship from
-// source village to target village with the given compass direction.
 func (r *Repository) CreateVillageToVillageRel(ctx context.Context, sourceID, targetID int64, dir direction) error {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
 	defer session.Close(ctx)
@@ -474,3 +456,92 @@ func (r *Repository) CreateVillageToPlayerRel(ctx context.Context, villageID int
 	}
 	return nil
 }
+
+// BulkCreateRels creates all the given relationships in a single session,
+// avoiding the N*(N-1) session-overhead pattern from calling individual
+// CreateXxxRel methods in a loop.
+type relLink struct {
+	Src int64
+	Dst int64
+	Dir direction
+}
+
+func (r *Repository) BulkCreateRels(ctx context.Context, links []relLink) error {
+	if len(links) == 0 {
+		return nil
+	}
+
+	type p2vRow struct {
+		Vid int64 `neo4j:"vid"`
+		Dir string `neo4j:"dir"`
+	}
+	type v2pRow struct {
+		Vid int64 `neo4j:"vid"`
+		Dir string `neo4j:"dir"`
+	}
+	type v2vRow struct {
+		Sid int64 `neo4j:"sid"`
+		Tid int64 `neo4j:"tid"`
+		Dir string `neo4j:"dir"`
+	}
+	var p2vRows []p2vRow
+	var v2pRows []v2pRow
+	var v2vRows []v2vRow
+	for _, l := range links {
+		if l.Src == 0 {
+			p2vRows = append(p2vRows, p2vRow{Vid: l.Dst, Dir: string(l.Dir)})
+		} else if l.Dst == 0 {
+			v2pRows = append(v2pRows, v2pRow{Vid: l.Src, Dir: string(l.Dir)})
+		} else {
+			v2vRows = append(v2vRows, v2vRow{Sid: l.Src, Tid: l.Dst, Dir: string(l.Dir)})
+		}
+	}
+
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	if len(p2vRows) > 0 {
+		result, err := session.Run(ctx,
+			`UNWIND $rows AS r
+ MATCH (p:player), (v:Village {Id: r.vid})
+ CREATE (p)-[:Connected {Direction: r.dir}]->(v)`,
+			map[string]any{"rows": p2vRows},
+		)
+		if err != nil {
+			return fmt.Errorf("bulk player->village rels: %w", err)
+		}
+		if _, err = result.Consume(ctx); err != nil {
+			return fmt.Errorf("consume player->village rels: %w", err)
+		}
+	}
+	if len(v2pRows) > 0 {
+		result, err := session.Run(ctx,
+			`UNWIND $rows AS r
+ MATCH (v:Village {Id: r.vid}), (p:player)
+ CREATE (v)-[:Connected {Direction: r.dir}]->(p)`,
+			map[string]any{"rows": v2pRows},
+		)
+		if err != nil {
+			return fmt.Errorf("bulk village->player rels: %w", err)
+		}
+		if _, err = result.Consume(ctx); err != nil {
+			return fmt.Errorf("consume village->player rels: %w", err)
+		}
+	}
+	if len(v2vRows) > 0 {
+		result, err := session.Run(ctx,
+			`UNWIND $rows AS r
+ MATCH (v1:Village {Id: r.sid}), (v2:Village {Id: r.tid})
+ CREATE (v1)-[:Connected {Direction: r.dir}]->(v2)`,
+			map[string]any{"rows": v2vRows},
+		)
+		if err != nil {
+			return fmt.Errorf("bulk v2v rels: %w", err)
+		}
+		if _, err = result.Consume(ctx); err != nil {
+			return fmt.Errorf("consume v2v rels: %w", err)
+		}
+	}
+	return nil
+}
+

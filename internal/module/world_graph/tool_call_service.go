@@ -71,7 +71,13 @@ func (s *Service) CreateNewNpc(ctx context.Context, npcName string, villageID in
 }
 
 func (s *Service) CreateStepWithNpc(ctx context.Context, npcID int64, dialogueLines []string) error {
-	steps = append(steps, Step{
+	td := getTaskData(ctx)
+	if td == nil {
+		return fmt.Errorf("CreateStepWithNpc: no task data in context")
+	}
+	td.mu.Lock()
+	defer td.mu.Unlock()
+	td.steps = append(td.steps, Step{
 		NpcID:         npcID,
 		DialogueLines: dialogueLines,
 	})

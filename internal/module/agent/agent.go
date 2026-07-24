@@ -44,6 +44,10 @@ func Init(svc *world_graph.Service) {
 // ProcessTask runs a ReAct agent loop that observes the world, creates NPCs
 // and dialogue steps, then persists everything via CreateQuestWithSteps.
 func ProcessTask(ctx context.Context, worldName, worldDesc, emotion string) error {
+
+	// Wrap context with per-task storage, so concurrent tasks don't
+	// interfere with each other's steps.
+	ctx = world_graph.NewTaskContext(ctx)
 	if llmCfg == nil {
 		InitConfig()
 	}
@@ -84,7 +88,7 @@ func ProcessTask(ctx context.Context, worldName, worldDesc, emotion string) erro
 			return fmt.Errorf("generate: %w", err)
 		}
 
-		// No tool calls → LLM considers the task complete. Persist everything.
+		// No tool calls → persist the quest (guard runs inside CreateQuestWithSteps).
 		if len(resp.ToolCalls) == 0 {
 			return globalSvc.CreateQuestWithSteps(ctx)
 		}
@@ -111,3 +115,4 @@ func ProcessTask(ctx context.Context, worldName, worldDesc, emotion string) erro
 	}
 	return fmt.Errorf("agent exceeded %d iterations", maxIter)
 }
+

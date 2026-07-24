@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"quest_generator/internal/module/world_graph"
 
@@ -86,14 +87,34 @@ func newTools(svc *world_graph.Service) []*toolDef {
 				}),
 			},
 			execute: func(ctx context.Context, argsJSON string) (string, error) {
-				var args struct {
-					NpcID         int64    `json:"npc_id"`
-					DialogueLines []string `json:"dialogue_lines"`
+				// LLM sometimes sends malformed JSON (trailing commas) or a single
+				// string for dialogue_lines instead of an array.  Tolerate both.
+				cleaned := strings.TrimSpace(argsJSON)
+				// Remove trailing comma before ] and }
+				for strings.Contains(cleaned, ",]") || strings.Contains(cleaned, ",}") {
+					cleaned = strings.ReplaceAll(cleaned, ",]", "]")
+					cleaned = strings.ReplaceAll(cleaned, ",}", "}")
 				}
-				if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+
+				var raw struct {
+					NpcID         int64           `json:"npc_id"`
+					DialogueLines json.RawMessage `json:"dialogue_lines"`
+				}
+				if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
 					return "", fmt.Errorf("parse args: %w", err)
 				}
-				if err := svc.CreateStepWithNpc(ctx, args.NpcID, args.DialogueLines); err != nil {
+
+				var lines []string
+				// Try array first, then single string.
+				if err := json.Unmarshal(raw.DialogueLines, &lines); err != nil {
+					var single string
+					if err2 := json.Unmarshal(raw.DialogueLines, &single); err2 != nil {
+						return "", fmt.Errorf("dialogue_lines must be a string or []string")
+					}
+					lines = []string{single}
+				}
+
+				if err := svc.CreateStepWithNpc(ctx, raw.NpcID, lines); err != nil {
 					return "", err
 				}
 				return `{"status":"step_created"}`, nil
