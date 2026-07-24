@@ -16,3 +16,7 @@ type Quest struct {
 	ID    int64  `gorm:"primaryKey" json:"id"`
 	Steps []Step `gorm:"foreignKey:QuestID" json:"steps"`
 }
+
+type Village struct {
+	ID int64 `gorm:"primaryKey" json:"id"`
+}

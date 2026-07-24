@@ -17,8 +17,8 @@ func SetUpRouters(h *Handlers) *gin.Engine {
 	api := router.Group("/api")
 	{
 		api.POST("/tasks", h.TaskHandler.CreateTask)
-		api.GET("/tasks/:id", h.TaskHandler.QueryTaskResult)
 		api.GET("/quest/result", h.QuestHandler.GetResult)
+		api.POST("/village", h.QuestHandler.CreateVillage)
 	}
 	return router
 }

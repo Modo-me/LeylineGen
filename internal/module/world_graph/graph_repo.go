@@ -272,3 +272,47 @@ func (r *Repository) CreateNpcNodeByVillage(ctx context.Context, node *NpcNode, 
 	}
 	return nil
 }
+
+func (r *Repository) CreateVillageNode(ctx context.Context, node *VillageNode) error {
+	if node == nil {
+		return fmt.Errorf("village node is nil")
+	}
+
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.Run(ctx,
+		`CREATE (v:Village {Id: $id, Name: $name, X: $x, Z: $z})
+		 RETURN v`,
+		map[string]any{
+			"id":   node.ID,
+			"name": node.Name,
+			"x":    node.X,
+			"z":    node.Z,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create village node: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) CreateConnectedRel(ctx context.Context, source, target VillageNode, rel ConnectedRel) error {
+	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.Run(ctx,
+		`MATCH (v1:Village {Id: $sourceId}), (v2:Village {Id: $targetId})
+		 CREATE (v1)-[:Connected {Direction: $direction}]->(v2)
+		 RETURN v1, v2`,
+		map[string]any{
+			"sourceId":  source.ID,
+			"targetId":  target.ID,
+			"direction": string(rel.Direction),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create connected rel: %w", err)
+	}
+	return nil
+}

@@ -3,65 +3,45 @@ package world_graph
 import (
 	"context"
 	"fmt"
-
-	"gorm.io/gorm"
 )
 
-type service struct {
+type Service struct {
 	Repository *Repository
 }
 
-func NewService(repo *Repository) *service {
-	return &service{Repository: repo}
+func NewService(repo *Repository) *Service {
+	return &Service{Repository: repo}
 }
 
 var (
 	questID int64 = 1
+	steps   []Step
 )
 
-// SaveQuest creates a Quest along with NPC and Step records in a single
-// transaction and returns the new quest ID.
-func (s *service) SaveQuest(ctx context.Context, steps []StepInput) (int64, error) {
-	var quest Quest
-	err := s.Repository.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		seen := make(map[int64]bool)
-		for _, step := range steps {
-			if seen[step.NpcID] {
-				continue
-			}
-			seen[step.NpcID] = true
-			npc := Npc{ID: step.NpcID}
-			if err := tx.FirstOrCreate(&npc).Error; err != nil {
-				return fmt.Errorf("ensure npc %d: %w", step.NpcID, err)
-			}
-		}
-
-		if err := tx.Create(&quest).Error; err != nil {
-			return fmt.Errorf("create quest: %w", err)
-		}
-
-		for _, step := range steps {
-			s := Step{
-				QuestID:       quest.ID,
-				NpcID:         step.NpcID,
-				DialogueLines: step.DialogueLines,
-			}
-			if err := tx.Create(&s).Error; err != nil {
-				return fmt.Errorf("create step for npc %d: %w", step.NpcID, err)
-			}
-		}
-		return nil
-	})
+// CreateQuestWithSteps creates a new quest with the given steps and saves it to the repository.
+func (s *Service) CreateQuestWithSteps(ctx context.Context) error {
+	quest := &Quest{
+		Steps: steps,
+	}
+	err := s.Repository.CreateQuest(ctx, quest)
 	if err != nil {
-		return 0, err
+		return nil
+	}
+
+	for _, step := range steps {
+		step.QuestID = quest.ID
+		err := s.Repository.UpdateStep(ctx, &step)
+		if err != nil {
+			return nil
+		}
 	}
 	questID = quest.ID
-	return quest.ID, nil
+	return nil
 }
 
 // BuildResult aggregates data from the relational store and world_graph to
 // produce the final Result for a given quest.
-func (s *service) BuildResult(ctx context.Context) (*Result, error) {
+func (s *Service) BuildResult(ctx context.Context) (*Result, error) {
 	relQuest, err := s.Repository.QueryQuest(ctx, questID)
 	if err != nil {
 		return nil, fmt.Errorf("query quest %d: %w", questID, err)
@@ -96,4 +76,19 @@ func (s *service) BuildResult(ctx context.Context) (*Result, error) {
 	}
 
 	return &Result{Steps: steps}, nil
+}
+
+func (s *Service) CreateVillage(ctx context.Context, req *VillageCreationRequest) error {
+	village := &Village{}
+	err := s.Repository.CreateVillage(ctx, village)
+	if err != nil {
+		return err
+	}
+	villageNode := &VillageNode{
+		ID: village.ID,
+		X:  req.X,
+		Z:  req.Z,
+	}
+	err = s.Repository.CreateVillageNode(ctx, villageNode)
+	return err
 }

@@ -2,8 +2,6 @@ package task
 
 import "C"
 import (
-	"strconv"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,17 +25,4 @@ func (t *TaskHandler) CreateTask(c *gin.Context) {
 		c.JSON(500, gin.H{"error": "Failed to add task"})
 	}
 	c.JSON(201, gin.H{"taskId": taskId, "status": "pending"})
-}
-
-func (t *TaskHandler) QueryTaskResult(c *gin.Context) {
-	taskIdStr := c.Param("id")
-	taskId, err := strconv.ParseUint(taskIdStr, 10, 64)
-	if err != nil {
-		c.JSON(400, gin.H{"error": "invalid taskId"})
-	}
-	resultResp, err := t.taskService.QueryTaskResult(c.Request.Context(), uint(taskId))
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to query task result"})
-	}
-	c.JSON(200, resultResp)
 }

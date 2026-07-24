@@ -1,0 +1,103 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"quest_generator/internal/module/world_graph"
+
+	"github.com/cloudwego/eino/schema"
+)
+
+type toolDef struct {
+	info    *schema.ToolInfo
+	execute func(ctx context.Context, argsJSON string) (string, error)
+}
+
+func newTools(svc *world_graph.Service) []*toolDef {
+	return []*toolDef{
+		{
+			info: &schema.ToolInfo{
+				Name: "observe_player_nearby_world",
+				Desc: "观察玩家周围的所有村庄，获取村庄ID和名称",
+			},
+			execute: func(ctx context.Context, _ string) (string, error) {
+				info, err := svc.ObservePlayerNearbyWorld(ctx)
+				if err != nil {
+					return "", err
+				}
+				b, _ := json.Marshal(info)
+				return string(b), nil
+			},
+		},
+		{
+			info: &schema.ToolInfo{
+				Name: "observe_village_nearby_world",
+				Desc: "观察指定村庄周围有哪些村庄以及各村庄的相对方向",
+				ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+					"village_id": {Type: schema.Integer, Desc: "村庄ID", Required: true},
+				}),
+			},
+			execute: func(ctx context.Context, argsJSON string) (string, error) {
+				var args struct{ VillageID int64 `json:"village_id"` }
+				if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+					return "", fmt.Errorf("parse args: %w", err)
+				}
+				info, err := svc.ObserveVillageNearbyWorld(ctx, args.VillageID)
+				if err != nil {
+					return "", err
+				}
+				b, _ := json.Marshal(info)
+				return string(b), nil
+			},
+		},
+		{
+			info: &schema.ToolInfo{
+				Name: "create_new_npc",
+				Desc: "在指定村庄创建一个新NPC，返回NPC ID",
+				ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+					"npc_name":   {Type: schema.String, Desc: "NPC名称", Required: true},
+					"village_id": {Type: schema.Integer, Desc: "NPC所在村庄ID", Required: true},
+				}),
+			},
+			execute: func(ctx context.Context, argsJSON string) (string, error) {
+				var args struct {
+					NpcName   string `json:"npc_name"`
+					VillageID int64  `json:"village_id"`
+				}
+				if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+					return "", fmt.Errorf("parse args: %w", err)
+				}
+				npcID, err := svc.CreateNewNpc(ctx, args.NpcName, args.VillageID)
+				if err != nil {
+					return "", err
+				}
+				return fmt.Sprintf(`{"npc_id":%d,"status":"created"}`, npcID), nil
+			},
+		},
+		{
+			info: &schema.ToolInfo{
+				Name: "create_step_with_npc",
+				Desc: "为指定NPC创建对话步骤（台词列表）",
+				ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+					"npc_id":         {Type: schema.Integer, Desc: "NPC ID", Required: true},
+					"dialogue_lines": {Type: schema.Array, ElemInfo: &schema.ParameterInfo{Type: schema.String}, Desc: "该NPC的对话台词列表", Required: true},
+				}),
+			},
+			execute: func(ctx context.Context, argsJSON string) (string, error) {
+				var args struct {
+					NpcID         int64    `json:"npc_id"`
+					DialogueLines []string `json:"dialogue_lines"`
+				}
+				if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+					return "", fmt.Errorf("parse args: %w", err)
+				}
+				if err := svc.CreateStepWithNpc(ctx, args.NpcID, args.DialogueLines); err != nil {
+					return "", err
+				}
+				return `{"status":"step_created"}`, nil
+			},
+		},
+	}
+}

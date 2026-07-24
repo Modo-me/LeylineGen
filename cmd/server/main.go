@@ -4,6 +4,7 @@ import (
 	"context"
 	"quest_generator/internal/database/graph"
 	"quest_generator/internal/database/relational"
+	"quest_generator/internal/module/agent"
 	"quest_generator/internal/module/task"
 	"quest_generator/internal/module/world_graph"
 	"quest_generator/internal/router"
@@ -12,32 +13,27 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Initialize graph database
 	driver := graph.DbInit()
 	defer driver.Close(ctx)
 	if err := driver.VerifyConnectivity(ctx); err != nil {
 		panic(err)
 	}
 
-	// Initialize relational database
 	db := relational.DbInit()
 
-	// Initialize queue producer
 	producer, redisAddr := producerInit()
 
 	taskRepository := task.NewTaskRepository(db)
 	taskService := task.NewTaskService(taskRepository, producer)
 	taskHandler := task.NewTaskHandler(taskService)
 
-	// Initialize queue consumer
-	consumerInit(redisAddr, taskService)
-
-	// Initialize world_graph
 	wgRepo := world_graph.NewRepository(driver, db)
 	wgSvc := world_graph.NewService(wgRepo)
+	agent.Init(wgSvc)
 	wgHandler := world_graph.NewHandler(wgSvc)
 
-	// Set up routers
+	consumerInit(redisAddr, taskService)
+
 	handlers := &router.Handlers{
 		TaskHandler:  taskHandler,
 		QuestHandler: wgHandler,

@@ -45,18 +45,6 @@ func (ts *TaskService) CreateTask(ctx context.Context, taskInfo *TaskInfo) (uint
 	return taskID, nil
 }
 
-func (ts *TaskService) QueryTaskResult(ctx context.Context, id uint) (ResultRespInfo, error) {
-	task, err := ts.taskRepository.QueryTask(ctx, id)
-	if err != nil {
-		return ResultRespInfo{}, err
-	}
-	resultInfo := ResultRespInfo{
-		State:  task.State,
-		Result: task.Result,
-	}
-	return resultInfo, err
-}
-
 func (ts *TaskService) QueryTaskInfo(ctx context.Context, id uint) (*TaskInfo, error) {
 	task, err := ts.taskRepository.QueryTask(ctx, id)
 	if err != nil {

@@ -1,6 +1,6 @@
 package world_graph
 
-// ==== Result data to be returned to the client====
+// ==== Result data to be returned to the client ====
 
 type Result struct {
 	Steps []StepResult `json:"steps"`
@@ -19,18 +19,18 @@ type StepResult struct {
 // ==== Tool calling data to be returned for agent =====
 
 type NearbyWorldInfo struct {
-	VillagesInfo []villageInfo `json:"villagesInfo"`
+	VillagesInfo []VillageInfo `json:"villagesInfo"`
 }
 
-type villageInfo struct {
+type VillageInfo struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`
 	Direction string `json:"direction"`
 }
 
-// ==== Other ====
+// ==== Client Request data to be sent to the service ====
 
-type StepInput struct {
-	NpcID         int64
-	DialogueLines []string
+type VillageCreationRequest struct {
+	X int64 `json:"x"`
+	Z int64 `json:"z"`
 }

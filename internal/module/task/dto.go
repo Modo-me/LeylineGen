@@ -6,9 +6,3 @@ type TaskInfo struct {
 	WorldDesc string
 	Emotion   string
 }
-
-// TODO: add percentage field
-type ResultRespInfo struct {
-	State  string
-	Result TaskResult
-}

@@ -7,10 +7,10 @@ import (
 )
 
 type Handler struct {
-	svc *service
+	svc *Service
 }
 
-func NewHandler(svc *service) *Handler {
+func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
@@ -25,4 +25,18 @@ func (h *Handler) GetResult(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// CreateVillage handles POST /api/village.
+func (h *Handler) CreateVillage(c *gin.Context) {
+	var req VillageCreationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.svc.CreateVillage(c.Request.Context(), &req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"status": "ok"})
 }
